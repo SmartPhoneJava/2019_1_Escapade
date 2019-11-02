@@ -12,5 +12,10 @@
 *.out
 *.html
 
-secret.json
+/vendor
+/bin
+secret*.json
 .vscode
+/vault/data/*
+/consul/data/*
+/vault/logs/*

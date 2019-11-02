@@ -1,8 +1,6 @@
 package database
 
 import (
-	"fmt"
-
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
 
 	"database/sql"
@@ -11,28 +9,47 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func (db *DataBase) createGame(tx *sql.Tx, game models.Game) (id int, err error) {
+func (db *DataBase) createGame(tx *sql.Tx, game *models.Game) (int32, error) {
 	sqlInsert := `
-	INSERT INTO Game(roomID, name, players, status, timeToPrepare,
-		timeToPlay, date) VALUES
-		($1, $2, $3, $4, $5, $6, $7)
+	INSERT INTO Game(roomID, name, players, timeToPrepare,
+		timeToPlay, date, noAnonymous, deathmatch) VALUES
+		($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id
 		`
-	row := tx.QueryRow(sqlInsert, game.RoomID, game.Name,
-		game.Players, game.Status, game.TimeToPrepare,
-		game.TimeToPlay, game.Date)
+	row := tx.QueryRow(sqlInsert, game.Settings.ID, game.Settings.Name,
+		game.Settings.Players, game.Settings.TimeToPrepare,
+		game.Settings.TimeToPlay, game.Date, game.Settings.NoAnonymous,
+		game.Settings.Deathmatch)
 
-	err = row.Scan(&id)
-
-	return
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
-func (db *DataBase) createGamers(tx *sql.Tx, GameID int, gamers []models.Gamer) (err error) {
+func (db *DataBase) updateGame(tx *sql.Tx, game *models.Game) error {
+	sqlStatement := `
+	UPDATE Game 
+		SET status = $1, chatID = $2, recruitment = $3, playing = $4
+		WHERE id = $5
+		RETURNING id
+	`
+
+	row := tx.QueryRow(sqlStatement, game.Status, game.ChatID,
+		game.RecruitmentTime, game.PlayingTime, game.Settings.ID)
+
+	var id int32
+	err := row.Scan(&id)
+	return err
+}
+
+func (db *DataBase) createGamers(tx *sql.Tx, GameID int32,
+	gamers []models.Gamer) error {
 	sqlInsert := `
 	INSERT INTO Gamer(player_id, game_id, score, time,
 		 left_click, right_click, explosion, won) VALUES
     ($1, $2, $3, $4::interval, $5, $6, $7, $8);
 		`
+	var err error
 
 	for _, gamer := range gamers {
 		_, err = tx.Exec(sqlInsert, gamer.ID, GameID, gamer.Score, gamer.Time,
@@ -41,12 +58,13 @@ func (db *DataBase) createGamers(tx *sql.Tx, GameID int, gamers []models.Gamer) 
 			break
 		}
 	}
-	return
+	return err
 }
 
-func (db *DataBase) createField(tx *sql.Tx, gameID int, field models.Field) (id int, err error) {
+func (db *DataBase) createField(tx *sql.Tx, gameID int32,
+	field models.Field) (int32, error) {
 	sqlInsert := `
-	INSERT INTO Field(game_id, width, height, cellsLeft, difficult,
+	INSERT INTO Field(game_id, width, height, cells_left, difficult,
 		mines) VALUES
 		($1, $2, $3, $4, $5, $6)
 		RETURNING id
@@ -55,16 +73,18 @@ func (db *DataBase) createField(tx *sql.Tx, gameID int, field models.Field) (id 
 		field.Height, field.CellsLeft, field.Difficult,
 		field.Mines)
 
-	err = row.Scan(&id)
-	return
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
-func (db *DataBase) createActions(tx *sql.Tx, GameID int, actions []models.Action) (err error) {
+func (db *DataBase) createActions(tx *sql.Tx, GameID int32, actions []models.Action) error {
 	sqlInsert := `
 	INSERT INTO Action(game_id, player_id, action, date) VALUES
     ($1, $2, $3, $4);
 		`
 
+	var err error
 	for _, action := range actions {
 		_, err = tx.Exec(sqlInsert, GameID,
 			action.PlayerID, action.ActionID, action.Date)
@@ -72,24 +92,16 @@ func (db *DataBase) createActions(tx *sql.Tx, GameID int, actions []models.Actio
 			break
 		}
 	}
-	return
+	return err
 }
 
-/*
-type GameInformation struct {
-	Game    Game     `json:"game"`
-	Field   Field    `json:"field"`
-	Actions []Action `json:"actions"`
-	Cells   []Cell   `json:"cells"`
-	Gamers  []Gamer  `json:"gamer"`
-}
-*/
-func (db *DataBase) createCells(tx *sql.Tx, FieldID int, cells []models.Cell) (err error) {
+func (db *DataBase) createCells(tx *sql.Tx, FieldID int32, cells []models.Cell) error {
 	sqlInsert := `
 	INSERT INTO Cell(field_id, player_id, x, y, value, date) VALUES
     ($1, $2, $3, $4, $5, $6);
 		`
 
+	var err error
 	for _, cell := range cells {
 		_, err = tx.Exec(sqlInsert, FieldID, cell.PlayerID,
 			cell.X, cell.Y, cell.Value, cell.Date)
@@ -97,49 +109,42 @@ func (db *DataBase) createCells(tx *sql.Tx, FieldID int, cells []models.Cell) (e
 			break
 		}
 	}
-	return
+	return err
 }
 
 // getGamesURL get user games URL
-func (db *DataBase) getGamesURL(tx *sql.Tx, playerID int) (URLs []string, err error) {
-	getURLs := `
-	SELECT roomID
+func (db *DataBase) getGamesURL(tx *sql.Tx, playerID int32) ([]string, error) {
+	var (
+		getURLs = `SELECT roomID
 				 FROM Game
 				 join Gamer
 				 on Game.id = Gamer.game_id 
 				 where player_id = $1
 	`
 
-	URLs = make([]string, 0)
-	rows, erro := tx.Query(getURLs, playerID)
+		URLs      = make([]string, 0)
+		rows, err = tx.Query(getURLs, playerID)
+	)
 
-	if erro != nil {
-		err = erro
-		return
+	if err != nil {
+		return URLs, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var url string
 		if err = rows.Scan(&url); err != nil {
-
 			break
 		}
 		URLs = append(URLs, url)
 	}
-	if err != nil {
-		return
-	}
-	return
+	return URLs, err
 }
 
-// GetGameInformation get all information about game:
-// game, gamers, field, history of cells and actions
-func (db *DataBase) GetGameInformation(tx *sql.Tx, roomID string) (gameInformation models.GameInformation, err error) {
+func (db *DataBase) getGame(tx *sql.Tx, roomID string) (models.Game, error) {
 
 	getGame := `
-	SELECT id, roomID, name, players, status, timeToPrepare,
-	 timeToPlay, date 
+	SELECT id, roomID, name, players, status, timeToPrepare, timeToPlay, date 
 				 FROM Game
 				 where roomID like $1
 	`
@@ -147,27 +152,23 @@ func (db *DataBase) GetGameInformation(tx *sql.Tx, roomID string) (gameInformati
 	row := tx.QueryRow(getGame, roomID)
 
 	game := models.Game{}
-	var gameID int
-	err = row.Scan(&gameID, &game.RoomID, &game.Name,
-		&game.Players, &game.Status, &game.TimeToPrepare,
-		&game.TimeToPlay, &game.Date)
-	if err != nil {
-		return
-	}
+	err := row.Scan(&game.ID, &game.Settings.ID, &game.Settings.Name,
+		&game.Settings.Players, &game.Status, &game.Settings.TimeToPrepare,
+		&game.Settings.TimeToPlay, &game.Date)
+	return game, err
+}
 
+func (db *DataBase) getGamers(tx *sql.Tx, gameID int32) ([]models.Gamer, error) {
 	getGamers := `
 	SELECT GR.player_id, GR.score, EXTRACT(seconds FROM GR.time), GR.left_click,
 				GR.right_click, GR.explosion, GR.won
 			FROM Gamer as GR 
-			where GR.game_id = $1
-	`
+			where GR.game_id = $1`
 
 	gamers := make([]models.Gamer, 0)
-	rows, erro := tx.Query(getGamers, gameID)
-
-	if erro != nil {
-		err = erro
-		return
+	rows, err := tx.Query(getGamers, gameID)
+	if err != nil {
+		return gamers, err
 	}
 	defer rows.Close()
 
@@ -180,148 +181,64 @@ func (db *DataBase) GetGameInformation(tx *sql.Tx, roomID string) (gameInformati
 		}
 		gamers = append(gamers, gamer)
 	}
-	if err != nil {
-		return
-	}
+	return gamers, err
+}
 
-	getField := `
-	SELECT id, width, height, cellsLeft, difficult, mines
-		from Field where game_id = $1
-	`
-
-	row = tx.QueryRow(getField, gameID)
-
-	field := models.Field{}
-	var fieldID int
-	err = row.Scan(&fieldID, &field.Width, &field.Height,
+func (db *DataBase) getField(tx *sql.Tx, gameID int32) (int, models.Field, error) {
+	getField := `SELECT id, width, height, cells_left, difficult, mines
+		from Field where game_id = $1`
+	row := tx.QueryRow(getField, gameID)
+	var (
+		field   models.Field
+		fieldID int
+	)
+	err := row.Scan(&fieldID, &field.Width, &field.Height,
 		&field.CellsLeft, &field.Difficult, &field.Mines)
-	if err != nil {
-		return
-	}
+	return fieldID, field, err
+}
 
-	getActions := `
-	SELECT player_id, action, date
-		from Action where game_id = $1
-	`
+func (db *DataBase) getActions(tx *sql.Tx, gameID int32) ([]models.Action, error) {
+	getActions := ` SELECT player_id, action, date 
+	from Action where game_id = $1`
 
 	actions := make([]models.Action, 0)
-	rows1, err1 := tx.Query(getActions, gameID)
-
-	if err1 != nil {
-		err = err1
-		return
+	rows, err := tx.Query(getActions, gameID)
+	if err != nil {
+		return actions, err
 	}
-	defer rows1.Close()
+	defer rows.Close()
 
-	for rows1.Next() {
+	for rows.Next() {
 		action := models.Action{}
-		if err = rows1.Scan(&action.PlayerID, &action.ActionID,
-			&action.Date); err != nil {
-
+		err = rows.Scan(&action.PlayerID, &action.ActionID, &action.Date)
+		if err != nil {
 			break
 		}
 		actions = append(actions, action)
 	}
-	if err != nil {
-		return
-	}
+	return actions, err
+}
 
-	getCells := `
-	SELECT player_id, x, y, value, date
-		from Cell where field_id = $1
-	`
+func (db *DataBase) getCells(tx *sql.Tx, fieldID int) ([]models.Cell, error) {
+	getCells := `SELECT player_id, x, y, value, date
+	from Cell where field_id = $1`
 
 	cells := make([]models.Cell, 0)
-	rows2, err2 := tx.Query(getCells, fieldID)
+	rows, err := tx.Query(getCells, fieldID)
 
-	if err2 != nil {
-		err = err2
-		return
+	if err != nil {
+		return cells, err
 	}
-	defer rows2.Close()
+	defer rows.Close()
 
-	for rows2.Next() {
+	for rows.Next() {
 		cell := models.Cell{}
-		if err = rows2.Scan(&cell.PlayerID, &cell.X,
+		if err = rows.Scan(&cell.PlayerID, &cell.X,
 			&cell.Y, &cell.Value, &cell.Date); err != nil {
 
 			break
 		}
 		cells = append(cells, cell)
 	}
-	if err != nil {
-		return
-	}
-
-	var messages []*models.Message
-	messages, err = db.getMessages(tx, true, game.RoomID)
-	if err != nil {
-		fmt.Println("some eror with messages happened", err.Error())
-	}
-
-	return models.GameInformation{
-		Game:     game,
-		Gamers:   gamers,
-		Field:    field,
-		Actions:  actions,
-		Cells:    cells,
-		Messages: messages,
-	}, err
-
+	return cells, err
 }
-
-// GetFullGamesInformation returns games, played by player with some name
-/*
-func (db *DataBase) GetFullGamesInformation(tx *sql.Tx, UserID int,
-	page int) (games []*models.GameInformation, err error) {
-
-	size := db.PageGames
-	sqlStatement := `
-	SELECT 	GE.width, GE.height, GE.difficult, GE.players,
-	 GE.mines, GE.date, GR.score,
-		GR.time, GR.left_click, GR.right_click, GR.explosion,
-		GR.won
-	 FROM Gamer as GR
-	 join Game as GE
-		ON GR.id = $1 and GR.game_id = GE.id
-		OFFSET $2 Limit $3
-	`
-
-	games = make([]*models.GameInformation, 0, size)
-	rows, erro := tx.Query(sqlStatement, UserID, size*(page-1), size) // //, name)
-
-	if erro != nil {
-		err = erro
-
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		game := &models.GameInformation{}
-		game.Game = &models.Game{}
-		game.Gamers = make([]*models.Gamer, 1)
-		/*
-			ge.width, ge.height, ge.difficult,
-							ge.players, ge.mines, ge.date, ge.online,
-							gr.score, gr.time, gr.mines_open,
-							gr.left_click, gr.right_click,
-							gr.explosion, gr.won
-			 FROM Player as p */
-/*
-		if err = rows.Scan(&game.Game.Width,
-			&game.Game.Height,
-			&game.Game.Difficult, &game.Game.Players,
-			&game.Game.Mines, &game.Game.Date,
-			&game.Gamers[0].Score, &game.Gamers[0].Time,
-			&game.Gamers[0].LeftClick, &game.Gamers[0].RightClick,
-			&game.Gamers[0].Explosion, &game.Gamers[0].Won); err != nil {
-
-			break
-		}
-
-		games = append(games, game)
-	}
-
-	return
-}*/

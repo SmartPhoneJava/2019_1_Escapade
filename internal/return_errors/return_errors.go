@@ -2,6 +2,10 @@ package rerrors
 
 import "errors"
 
+func ID() error {
+	return errors.New("No such id")
+}
+
 // ErrorInvalidName call it, if client give you
 // 	invalid username
 func ErrorInvalidUserID() error {
@@ -20,6 +24,11 @@ func ErrorUsersNotFound() error {
 	return errors.New("Users not found")
 }
 
+// NoUpdate godoc
+func NoUpdate() error {
+	return errors.New("No updated fields")
+}
+
 // ErrorGamesNotFound call it, if you cant
 // 	find games
 func ErrorGamesNotFound() error {
@@ -32,16 +41,8 @@ func ErrorAvatarNotFound() error {
 	return errors.New("Avatar not found")
 }
 
-// ErrorInvalidFile call it, if client give you
-// 	invalid file as a request parameter
-func ErrorInvalidFile() error {
-	return errors.New("Invalid file")
-}
-
-// ErrorInvalidFileFormat call it, if client give you
-// 	invalid file as a request parameter
-func ErrorInvalidFileFormat() error {
-	return errors.New("Invalid file format. Use .png or .jpg only")
+func NoAvatarWrapper(err error) error {
+	return errors.New("Avatar not found. More: " + err.Error())
 }
 
 // ErrorDataBase  call it, if error in database
@@ -49,7 +50,15 @@ func ErrorDataBase() error {
 	return errors.New("DataBase error")
 }
 
+func DatabaseWrapper(err error) error {
+	return errors.New("Database error. More: " + err.Error())
+}
+
 // ErrorServer  call it, if error internal
 func ErrorServer() error {
 	return errors.New("Server error")
+}
+
+func ServerWrapper(err error) error {
+	return errors.New("Server error. More: " + err.Error())
 }

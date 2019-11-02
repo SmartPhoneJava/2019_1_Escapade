@@ -9,7 +9,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func (db *DataBase) createRecords(tx *sql.Tx, id int) (err error) {
+func (db *DataBase) createRecords(tx *sql.Tx, id int) error {
+	var err error
 	sqlInsert := `
 	INSERT INTO Record(player_id, difficult) VALUES
     ($1, $2);
@@ -18,16 +19,18 @@ func (db *DataBase) createRecords(tx *sql.Tx, id int) (err error) {
 	for i := 0; i < difficultAmount; i++ {
 		_, err = tx.Exec(sqlInsert, id, i)
 		if err != nil {
-			return
+			break
 		}
 	}
-	return
+	return err
 }
 
-func (db *DataBase) updateRecords(tx *sql.Tx, id int,
-	record *models.Record) (err error) {
+func (db *DataBase) updateRecords(tx *sql.Tx, id int32, record *models.Record) error {
 
-	var sqlStatement string
+	var (
+		sqlStatement string
+		err          error
+	)
 	record.Fix()
 	if record.SingleWin > 0 {
 		sqlStatement = `
@@ -67,5 +70,5 @@ func (db *DataBase) updateRecords(tx *sql.Tx, id int,
 			record.OnlineWin, id, record.Difficult)
 	}
 
-	return
+	return err
 }

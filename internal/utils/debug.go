@@ -1,11 +1,9 @@
 package utils
 
-import (
-	"fmt"
-)
+import "fmt"
 
-// PrintResult log requests results
-func ShowWebsocketMessage(message []byte, id int) {
+// ShowWebsocketMessage record information transmitted over the websocket
+func ShowWebsocketMessage(message []byte, id int32) {
 	str := string(message)
 	var start, end, counter int
 	for i, s := range str {
@@ -22,14 +20,16 @@ func ShowWebsocketMessage(message []byte, id int) {
 	}
 	if start != end {
 		print := str[start:end]
-		//print = str
-		fmt.Println("#", id, " get that:", print)
+		Debug(false, "#", id, " get that:", print)
 	}
 }
 
+// Debug record information for logging
+// if 'needPanic' is true then panic(text) will be called
 func Debug(needPanic bool, text ...interface{}) {
-	if needPanic {
-		panic(text)
-	}
+	fmt.Print("    ")
 	fmt.Println(text...)
+	if needPanic {
+		panic("panic called!")
+	}
 }
