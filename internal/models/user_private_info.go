@@ -1,13 +1,15 @@
 package models
 
 // UserPrivateInfo shows personal player info
+//easyjson:json
 type UserPrivateInfo struct {
 	ID       int    `json:"-"`
-	Name     string `json:"name"`
-	Password string `json:"password"`
+	Name     string `json:"name" maxLength:"30" example:"John" `
+	Password string `json:"password" minLength:"6" maxLength:"30" example:"easyPassword" `
 }
 
-// Update update all fields
+// Update godoc
+// update all fields
 func (confirmed *UserPrivateInfo) Update(another *UserPrivateInfo) {
 	another.ID = confirmed.ID
 	updateParameter(&another.Name, confirmed.Name)
@@ -20,4 +22,20 @@ func updateParameter(
 		*to = from
 	}
 	return
+}
+
+func (user *UserPrivateInfo) GetName() string {
+	return user.Name
+}
+
+func (user *UserPrivateInfo) GetPassword() string {
+	return user.Password
+}
+
+func (user *UserPrivateInfo) SetName(name string) {
+	user.Name = name
+}
+
+func (user *UserPrivateInfo) SetPassword(password string) {
+	user.Password = password
 }

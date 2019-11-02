@@ -1,81 +1,69 @@
 package config
 
 import (
-	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
+	"golang.org/x/oauth2"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
 )
 
 // Configuration contains all types of configurations
+//easyjson:json
 type Configuration struct {
-	Server     ServerConfig      `json:"server"`
-	Cors       CORSConfig        `json:"cors"`
-	DataBase   DatabaseConfig    `json:"dataBase"`
-	Storage    FileStorageConfig `json:"storage"`
-	AWS        AwsPublicConfig   `json:"aws"`
-	Game       GameConfig        `json:"game"`
-	Session    SessionConfig     `json:"session"`
-	WebSocket  WebSocketConfig   `json:"websocket"`
-	AuthClient AuthClient        `json:"authClient"`
+	Server     Server     `json:"server"`
+	Cors       CORS       `json:"cors"`
+	DataBase   Database   `json:"dataBase"`
+	Game       Game       `json:"game"`
+	Cookie     Cookie     `json:"session"`
+	WebSocket  WebSocket  `json:"websocket"`
+	Service    Service    `json:"service"`
+	Auth       Auth       `json:"auth"`
+	AuthClient AuthClient `json:"authClient"`
 }
 
 // ServerConfig set host, post and buffers sizes
-type ServerConfig struct {
+//easyjson:json
+type Server struct {
 	Host      string `json:"host"`
 	PortURL   string `json:"portUrl"`
 	PortValue string `json:"portValue"`
+	// timeouts in seconds
+	ReadTimeoutS  int `json:"readTimeoutS"`
+	WriteTimeoutS int `json:"writeTimeoutS"`
+	IdleTimeoutS  int `json:"idleTimeoutS"`
+	WaitTimeoutS  int `json:"waitTimeoutS"`
+	ExecTimeoutS  int `json:"execTimeoutS"`
 }
 
 // CORSConfig set allowable origins, headers and methods
-type CORSConfig struct {
+//easyjson:json
+type CORS struct {
 	Origins     []string `json:"origins"`
 	Headers     []string `json:"headers"`
-	Credentials string   `json:"credentials"`
 	Methods     []string `json:"methods"`
+	Credentials string   `json:"credentials"`
 }
 
 // DatabaseConfig set type of database management system
 //   the url of connection string, max amount of
 //   connections, tables, sizes of page  of gamers
 //   and users
-type DatabaseConfig struct {
-	DriverName       string `json:"driverName"`
-	URL              string `json:"url"`
-	ConnectionString string `json:"connectionString"`
-	MaxOpenConns     int    `json:"maxOpenConns"`
-	PageGames        int    `json:"pageGames"`
-	PageUsers        int    `json:"pageUsers"`
+//easyjson:json
+type Database struct {
+	DriverName           string `json:"driverName"`
+	URL                  string `json:"url"`
+	ConnectionString     string `json:"connectionString"`
+	AuthConnectionString string `json:"authConnectionString"`
+	MaxOpenConns         int    `json:"maxOpenConns"`
+	PageGames            int    `json:"pageGames"`
+	PageUsers            int    `json:"pageUsers"`
 }
 
-// FileStorageConfig set, where avatars store and
-//    what mode set to files/directories
-type FileStorageConfig struct {
-	PlayersAvatarsStorage string `json:"playersAvatarsStorage"`
-	DefaultAvatar         string `json:"defaultAvatar"`
-	Region                string `json:"region"`
-	Endpoint              string `json:"endpoint"`
-}
-
-// AwsPublicConfig public aws information as region and endpoint
-type AwsPublicConfig struct {
-	AwsConfig *aws.Config `json:"-"`
-	Region    string      `json:"region"`
-	Endpoint  string      `json:"endpoint"`
-}
-
-// AwsPrivateConfig private aws information. Need another json.
-type AwsPrivateConfig struct {
-	AccessURL string `json:"accessUrl"`
-	AccessKey string `json:"accessKey"`
-	SecretURL string `json:"secretUrl"`
-	SecretKey string `json:"secretKey"`
-}
-
-type FieldConfig struct {
+//easyjson:json
+type Field struct {
 	MinAreaSize    int `json:"minAreaSize"`
 	MaxAreaSize    int `json:"maxAreaSize"`
 	MinProbability int `json:"minProbability"`
@@ -86,33 +74,68 @@ type FieldConfig struct {
 // how much connections can join. Also there are flags:
 // can server close rooms or not(for history mode),
 // metrics should be recorded or not
-type GameConfig struct {
-	RoomsCapacity      int          `json:"roomsCapacity"`
-	ConnectionCapacity int          `json:"connectionCapacity"`
-	Location           string       `json:"location"`
-	CanClose           bool         `json:"closeRoom"`
-	Metrics            bool         `json:"metrics"`
-	Field              *FieldConfig `json:"field"`
+//easyjson:json
+type Game struct {
+	RoomsCapacity      int32  `json:"roomsCapacity"`
+	ConnectionCapacity int32  `json:"connectionCapacity"`
+	Location           string `json:"location"`
+	CanClose           bool   `json:"closeRoom"`
+	Metrics            bool   `json:"metrics"`
+	Field              *Field `json:"field"`
 }
 
 // AuthClient client of auth microservice
+//easyjson:json
+type Auth struct {
+	Salt                    string       `json:"salt"`
+	AccessTokenExpireHours  int          `json:"accessTokenExpireHours"`
+	RefreshTokenExpireHours int          `json:"refreshTokenExpireHours"`
+	IsGenerateRefresh       bool         `json:"isGenerateRefresh"`
+	WithReserve             bool         `json:"withReserve"`
+	TokenType               string       `json:"tokenType"`
+	WhiteList               []AuthClient `json:"whiteList"`
+}
+
 type AuthClient struct {
-	URL     string `json:"url"`
-	Address string `json:"address"`
+	// address of auth service
+	Address      string        `json:"address"`
+	ClientID     string        `json:"id"`
+	ClientSecret string        `json:"secret"`
+	Scopes       []string      `json:"scopes"`
+	RedirectURL  string        `json:"redirectURL"`
+	Config       oauth2.Config `json:"-"`
+}
+
+//easyjson:json
+type Service struct {
+	ConsulID  string   `json:"-"`
+	Name      string   `json:"name"`
+	DependsOn []string `json:"dependsOn"`
 }
 
 // SessionConfig set cookie name, path, length, expiration time
 // and HTTPonly flag
-type SessionConfig struct {
-	Name            string `json:"name"`
-	Path            string `json:"path"`
-	Length          int    `json:"length"`
-	LifetimeSeconds int    `json:"lifetime"`
-	HTTPOnly        bool   `json:"httpOnly"`
+//easyjson:json
+type Cookie struct {
+	Path          string     `json:"path"`
+	Length        int        `json:"length"`
+	LifetimeHours int        `json:"lifetime_hours"`
+	HTTPOnly      bool       `json:"httpOnly"`
+	Auth          AuthCookie `json:"keys"`
+}
+
+//easyjson:json
+type AuthCookie struct {
+	AccessToken   string `json:"accessToken"`
+	TokenType     string `json:"tokenType"`
+	RefreshToken  string `json:"refreshToken"`
+	Expire        string `json:"expire"`
+	ReservePrefix string `json:"reservePrefix"`
 }
 
 // WebSocketConfig set timeouts
-type WebSocketConfig struct {
+//easyjson:json
+type WebSocket struct {
 	WriteWait       int   `json:"writeWait"`
 	PongWait        int   `json:"pongWait"`
 	PingPeriod      int   `json:"pingPeriod"`
@@ -122,6 +145,7 @@ type WebSocketConfig struct {
 }
 
 // WebSocketSettings set timeouts
+//easyjson:json
 type WebSocketSettings struct {
 	WriteWait       time.Duration `json:"writeWait"`
 	PongWait        time.Duration `json:"pongWait"`
@@ -135,7 +159,7 @@ func set(URL, value string) {
 	if URL != "" && os.Getenv(URL) == "" {
 		os.Setenv(URL, value)
 	}
-	fmt.Println("environment -", URL, " :", value)
+	utils.Debug(false, "environment -", URL, " :", value)
 }
 
 // InitEnvironment set environmental variables
@@ -143,41 +167,29 @@ func InitEnvironment(c *Configuration) {
 
 	set(c.DataBase.URL, c.DataBase.ConnectionString)
 	set(c.Server.PortURL, c.Server.PortValue)
-	set(c.AuthClient.URL, c.AuthClient.Address)
 }
 
-// InitPublic load configuration file
-func InitPublic(publicConfigPath string) (conf *Configuration, err error) {
+// Init load configuration file and put part of parameters to Environment
+func Init(path string) (conf *Configuration, err error) {
 	conf = &Configuration{}
 	var data []byte
-	if data, err = ioutil.ReadFile(publicConfigPath); err != nil {
+	if data, err = ioutil.ReadFile(path); err != nil {
 		return
 	}
-	if err = json.Unmarshal(data, conf); err != nil {
+	if err = conf.UnmarshalJSON(data); err != nil {
 		return
 	}
-	conf.AWS.AwsConfig = &aws.Config{
-		Region:   aws.String(conf.AWS.Region),
-		Endpoint: aws.String(conf.AWS.Endpoint)}
+	utils.Debug(false, "cookie settings", conf.Cookie.Path, conf.Cookie.LifetimeHours)
+	conf.AuthClient.Config = oauth2.Config{
+		ClientID:     conf.AuthClient.ClientID,
+		ClientSecret: conf.AuthClient.ClientSecret,
+		Scopes:       conf.AuthClient.Scopes,
+		RedirectURL:  conf.AuthClient.RedirectURL,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  conf.AuthClient.Address + "/auth/authorize",
+			TokenURL: conf.AuthClient.Address + "/auth/token",
+		},
+	}
 	InitEnvironment(conf)
-	return
-}
-
-// InitPrivate load configuration file and set private environment
-func InitPrivate(privateConfigPath string) (err error) {
-	var data []byte
-
-	if data, err = ioutil.ReadFile(privateConfigPath); err != nil {
-		fmt.Println("no secret json found:", err.Error())
-		return
-	}
-	var apc = &AwsPrivateConfig{}
-	if err = json.Unmarshal(data, apc); err != nil {
-		fmt.Println("wrong secret json:", err.Error())
-		return
-	}
-
-	os.Setenv(apc.AccessURL, apc.AccessKey)
-	os.Setenv(apc.SecretURL, apc.SecretKey)
 	return
 }

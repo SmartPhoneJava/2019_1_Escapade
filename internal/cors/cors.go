@@ -2,8 +2,8 @@ package cors
 
 import (
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
 
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -21,20 +21,20 @@ func IsAllowed(origin string, origins []string) (allowed bool) {
 		}
 	}
 	if !allowed {
-		fmt.Println("Cant found:", origin)
+		utils.Debug(false, "cors:", origin, "not allowed!")
 	}
 	return
 }
 
 // SetCORS set cors headers
-func SetCORS(rw http.ResponseWriter, cc config.CORSConfig, name string) {
+func SetCORS(rw http.ResponseWriter, cc config.CORS, name string) {
 	rw.Header().Set("Access-Control-Allow-Origin", name)
 	rw.Header().Set("Access-Control-Allow-Headers", strings.Join(cc.Headers, ", "))
 	rw.Header().Set("Access-Control-Allow-Credentials", cc.Credentials)
-	rw.Header().Set("Access-Control-Allow-Methods", strings.Join(cc.Methods, ", "))
+	rw.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, PUT, OPTIONS")
 }
 
-// getOrigin get domain connected to server
+// GetOrigin get domain connected to server
 func GetOrigin(r *http.Request) string {
 	return r.Header.Get("Origin")
 }

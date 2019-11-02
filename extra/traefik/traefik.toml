@@ -1,0 +1,22 @@
+################################################################
+# Consul Catalog configuration backend
+################################################################
+
+# Enable Consul Catalog configuration backend.
+[consulCatalog]
+endpoint = "consul:8500"
+exposedByDefault = false
+prefix = "traefik"
+
+domain = "consul.localhost"
+# Default frontEnd Rule for Consul services.
+#
+# The format is a Go Template with:
+# - ".ServiceName", ".Domain" and ".Attributes" available
+# - "getTag(name, tags, defaultValue)", "hasTag(name, tags)" and "getAttribute(name, tags, defaultValue)" functions are available
+# - "getAttribute(...)" function uses prefixed tag names based on "prefix" value
+#
+# Optional
+# Default: "Host:{{.ServiceName}}.{{.Domain}}"
+#
+#frontEndRule = "Host:{{.ServiceName}}.{{Domain}}"
