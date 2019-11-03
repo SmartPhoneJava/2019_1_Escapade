@@ -122,27 +122,30 @@ func (field *Field) OpenEverything(cells *[]Cell) {
 // openCellArea open cell area, if there is no mines around
 // in this cell
 func (field *Field) openCellArea(x, y, ID int32, cells *[]Cell) {
-	if field.areCoordinatesRight(x, y) {
-		v := field.matrixValue(x, y)
-
-		if v < CellMine {
-			cell := NewCell(x, y, v, ID)
-			field.saveCell(cell, cells)
-			field.decrementCellsLeft()
-		}
-		if v == 0 {
-			field.openCellArea(x-1, y-1, ID, cells)
-			field.openCellArea(x-1, y, ID, cells)
-			field.openCellArea(x-1, y+1, ID, cells)
-
-			field.openCellArea(x, y+1, ID, cells)
-			field.openCellArea(x, y-1, ID, cells)
-
-			field.openCellArea(x+1, y-1, ID, cells)
-			field.openCellArea(x+1, y, ID, cells)
-			field.openCellArea(x+1, y+1, ID, cells)
-		}
+	if !field.areCoordinatesRight(x, y) {
+		return
 	}
+
+	v := field.matrixValue(x, y)
+
+	if v < CellMine {
+		cell := NewCell(x, y, v, ID)
+		field.saveCell(cell, cells)
+		field.decrementCellsLeft()
+	}
+	if v == 0 {
+		field.openCellArea(x-1, y-1, ID, cells)
+		field.openCellArea(x-1, y, ID, cells)
+		field.openCellArea(x-1, y+1, ID, cells)
+
+		field.openCellArea(x, y+1, ID, cells)
+		field.openCellArea(x, y-1, ID, cells)
+
+		field.openCellArea(x+1, y-1, ID, cells)
+		field.openCellArea(x+1, y, ID, cells)
+		field.openCellArea(x+1, y+1, ID, cells)
+	}
+
 }
 
 // IsCleared return true if all safe cells except flags open
@@ -263,111 +266,164 @@ func (field *Field) Zero() {
 	}
 }
 
-// SetMines fill matrix with mines
-func (field *Field) SetMines(flags []Flag, deathmatch bool) {
+// Fill fill matrix with mines, flags and mines counters
+func (field *Field) Fill(flags []Flag, deathmatch bool) {
 	if field.Done() {
 		return
 	}
 	field.wGroup.Add(1)
 	defer field.wGroup.Done()
 
-	var (
-		width  = field.Width
-		height = field.Height
-		mines  = field.Mines
-	)
-
+	field.Zero()
+	var minesCount int32
 	if deathmatch {
-		var (
-			gip      = float64(field.Width*field.Width) + float64(field.Height*field.Height)
-			areaSize = gip / field.Difficult / 2000.0
+		field.setFlags(flags)
+		minesCount = field.setMinesAroundFlags(flags)
+	}
+	field.setMines(minesCount)
+	field.setMinesCounters()
+}
 
-			minAreaSize = float64(field.config.MinAreaSize)
-			maxAreaSize = float64(field.config.MaxAreaSize)
-		)
+// 75
 
-		if areaSize < minAreaSize {
-			areaSize = minAreaSize
-		} else if areaSize > maxAreaSize {
-			areaSize = maxAreaSize
+// setMinesAroundFlags  surrounds flags with mines
+func (field *Field) setMinesAroundFlags(flags []Flag) int32 {
+	var (
+		mines       = field.Mines
+		mineArea    = field.countMineArea()
+		probability = field.fixProbability(5 * int(mineArea*mineArea))
+	)
+	for _, flag := range flags {
+		var b Borders
+		b.Init(flag.Cell, field.Width, field.Height, mineArea)
+		mines = field.setMinesAroundFlag(b, probability, mines)
+		if mines <= 0 {
+			break
 		}
-		var (
-			areaSizeINT    = int32(areaSize)
-			probability    = 5 * int(areaSize*areaSize)
-			minProbability = field.config.MinProbability
-			maxProbability = field.config.MaxProbability
-		)
-		if probability > maxProbability {
-			probability = maxProbability
-		} else if probability < minProbability {
-			probability = minProbability
-		}
-		for _, flag := range flags {
-			x := flag.Cell.X
-			y := flag.Cell.Y
-			var i, j int32
-			for i = x - areaSizeINT; i <= x+areaSizeINT; i++ {
-				if i >= 0 && i < width {
-					for j = y - areaSizeINT; j <= y+areaSizeINT; j++ {
-						if j >= 0 && j < height {
-							if field.matrixValue(i, j) != CellMine && !(x == i && y == j) {
-								rand.Seed(time.Now().UnixNano())
-								procent := rand.Intn(100)
-								utils.Debug(false, "[%d, %d] - %d\n", i, j, procent)
-								if procent > probability {
-									field.setMatrixValue(i, j, CellMine)
-									mines--
-									if mines == 0 {
-										return
-									}
-								}
-							}
-						}
-					}
+	}
+	return mines
+}
+
+func (field *Field) setMinesAroundFlag(b Borders, probability int, mines int32) int32 {
+	for i := b.left; i <= b.right; i++ {
+		for j := b.down; j <= b.up; j++ {
+			if field.canSetMine(i, j, probability) {
+				field.setMatrixValue(i, j, CellMine)
+				mines--
+				if mines == 0 {
+					return mines
 				}
 			}
 		}
 	}
-	for mines > 0 {
-
-		rand.Seed(time.Now().UnixNano())
-		someX := rand.Int31n(width)
-		someY := rand.Int31n(height)
-
-		if field.lessThenMine(someX, someY) {
-			field.setMatrixValue(someX, someY, CellMine)
-			mines--
-		}
-	}
+	return mines
 }
 
 // SetMinesCounters set the counters of min - cells,
 // which are not mine or flags
-func (field *Field) SetMinesCounters() {
+func (field *Field) setMinesCounters() {
 
-	var width, height, x, y, i, j, value int32
-	width = field.Width
-	height = field.Height
+	var (
+		x, y   int32
+		width  = field.Width
+		height = field.Height
+	)
 
 	for x = 0; x < width; x++ {
 		for y = 0; y < height; y++ {
 			if field.matrixValue(x, y) != 0 {
 				continue
 			}
-			value = 0
-
-			for i = x - 1; i <= x+1; i++ {
-				if i >= 0 && i < width {
-					for j = y - 1; j <= y+1; j++ {
-						if j >= 0 && j < height {
-							if field.matrixValue(i, j) == CellMine {
-								value++
-							}
-						}
-					}
-				}
+			var b Borders
+			c := Cell{
+				X: x,
+				Y: y,
 			}
-			field.setMatrixValue(x, y, value)
+			b.Init(c, field.Width, field.Height, 1)
+			field.setMineCounters(b, c)
+		}
+	}
+}
+
+func (field *Field) setMineCounters(b Borders, c Cell) {
+	var value int32
+	for i := b.left; i <= b.right; i++ {
+		for j := b.down; j <= b.up; j++ {
+			if field.matrixValue(i, j) == CellMine {
+				value++
+			}
+		}
+	}
+	field.setMatrixValue(c.X, c.Y, value)
+
+}
+
+func (field *Field) fixMineArea(area float64) float64 {
+	var (
+		min = float64(field.config.MinAreaSize)
+		max = float64(field.config.MaxAreaSize)
+	)
+
+	if area < min {
+		return min
+	}
+	if area > max {
+		return max
+	}
+	return area
+}
+
+func (field *Field) countMineArea() int32 {
+	gip := float64(field.Width*field.Width) + float64(field.Height*field.Height)
+	area := field.fixMineArea(gip / field.Difficult / 2000.0)
+	return int32(area)
+}
+
+func (field *Field) fixProbability(probability int) int {
+	var (
+		min = field.config.MinProbability
+		max = field.config.MaxProbability
+	)
+	if probability > max {
+		return max
+	}
+	if probability < min {
+		return min
+	}
+	return probability
+}
+
+// canSetMine determines whether a mine can be placed
+func (field *Field) canSetMine(i, j int32, probability int) bool {
+	if field.matrixValue(i, j) != 0 {
+		return false
+	}
+	rand.Seed(time.Now().UnixNano())
+	procent := rand.Intn(100)
+	return procent > probability
+}
+
+// setFlags set players flags to field
+func (field *Field) setFlags(flags []Flag) {
+	for _, flag := range flags {
+		field.setFlag(&flag.Cell)
+	}
+}
+
+// setMines set the remaining mines to free places
+func (field *Field) setMines(minesCount int32) {
+	var (
+		width  = field.Width
+		height = field.Height
+	)
+	for minesCount > 0 {
+		rand.Seed(time.Now().UnixNano())
+		someX := rand.Int31n(width)
+		someY := rand.Int31n(height)
+
+		if field.lessThenMine(someX, someY) {
+			field.setMatrixValue(someX, someY, CellMine)
+			minesCount--
 		}
 	}
 }
@@ -402,19 +458,11 @@ func FlagID(connID int32) int32 {
 ///////////////////// Set cells func //////////
 
 // SetFlag works only when mines not set
-func (field *Field) SetFlag(cell *Cell) {
-	if field.Done() {
-		return
-	}
-	field.wGroup.Add(1)
-	defer field.wGroup.Done()
-
+func (field *Field) setFlag(cell *Cell) {
 	// To identifier which flag we see, lets set id
 	// add CellIncrement to id, because if id = 3 we can think that there are 3 mines around
 	// we cant use -id, becase in future there will be a lot of conditions with
 	// something < 9 (to find not mine places)
-	utils.Debug(false, "setFlag", cell.X, cell.Y, cell.PlayerID, CellIncrement)
-
 	field.setMatrixValue(cell.X, cell.Y, FlagID(cell.PlayerID))
 }
 
