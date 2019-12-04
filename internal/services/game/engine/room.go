@@ -3,23 +3,13 @@ package engine
 import (
 	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/constants"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/return_errors"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
-)
-
-// Game status
-const (
-	StatusRecruitment = 0
-	StatusAborted     = 1 // in case of error
-	StatusFlagPlacing = 2
-	StatusRunning     = 3
-	StatusFinished    = 4
-	StatusHistory     = 5
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/constants"
 )
 
 // ConnectionAction is a bundle of Connection and action
@@ -33,16 +23,16 @@ type Room struct {
 	info             RoomInformationI
 	field            FieldProxyI
 	sync             synced.SyncI
-	api              APIStrategyI
+	api              RoomRequestsI
 	lobby            LobbyProxyI
-	models           ModelsAdapterI
-	sender           SendStrategyI
-	connEvents       ConnectionEventsStrategyI
+	models           RModelsI
+	sender           RSendI
+	client           RClientI
 	people           PeopleI
 	events           EventsI
-	record           ActionRecorderProxyI
-	metrics          MetricsStrategyI
-	messages         MessagesProxyI
+	record           ActionRecorderI
+	metrics          MetricsI
+	messages         MessagesI
 	garbageCollector GarbageCollectorI
 }
 
@@ -152,19 +142,11 @@ func (room *Room) registerInDB(lobby *Lobby, game *models.Game, id string) (int3
 // Init init instance of room
 func (room *Room) configureAndStart(ra *RoomArgs) {
 	var (
-		// в конфиг
-		/*
-			t = Timeouts{
-				timeoutPeopleFinding:   2.,
-				timeoutRunningPlayer:   60.,
-				timeoutRunningObserver: 5.,
-				timeoutFinished:        20.,
-			}*/
 		components = &RoomBuilder{}
 	)
 	ra.Field = NewField(ra.rs, &ra.c.Field)
 	components.Build(room, ra)
-	go room.events.Run()
+	go room.events.Run(room)
 }
 
 /* Examples of json

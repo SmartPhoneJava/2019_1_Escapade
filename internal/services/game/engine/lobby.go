@@ -5,13 +5,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/clients"
-	config "github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	models "github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	database "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
-	chat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
-	utils "github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/clients"
+	chat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/proto"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/database"
 )
 
 /*
@@ -248,7 +249,7 @@ func (lobby *Lobby) SetConfiguration(config *config.Game, db database.GameUseCas
 	)
 	location, err = time.LoadLocation(config.Location)
 	if err != nil {
-		utils.Debug(true, "cant set location!")
+		utils.Debug(true, "cant set location")
 	}
 	lobby.setMessages(make([]*models.Message, 0))
 	lobby.setConfig(config)

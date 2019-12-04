@@ -1,42 +1,40 @@
 package engine
 
 import (
-	"sync"
 	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	pChat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+
+	pChat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/database"
+	room_ "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/engine/room"
 )
 
-// ModelsAdapterI turns Game-type structures into models that can be sent
-//  to the client or to databases
-// Adapter Pattern
-type ModelsAdapterI interface {
-	Save(wg *sync.WaitGroup) error
+// RModelsI turns Game-type structures into models that can be sent
+// to the client or to databases
+// room model interface - adapter pattern
+type RModelsI interface {
+	Save() error
 	JSON() RoomJSON
 
 	responseRoomGameOver(timer bool, cells []Cell) *models.Response
 	responseRoomStatus(status int) *models.Response
 	responseRoom(conn *Connection, isPlayer bool) *models.Response
-
-	fromModelPlayerAction(action models.Action) *PlayerAction
-	toModelPlayerAction(action *PlayerAction) models.Action
 }
 
-// RoomModelsAdapter impelements ModelsAdapterI
-type RoomModelsAdapter struct {
+// RoomModels impelements RModelsI
+type RoomModels struct {
 	s  synced.SyncI
 	i  RoomInformationI
 	l  LobbyProxyI
 	e  EventsI
-	m  MessagesProxyI
+	m  MessagesI
 	p  PeopleI
-	re ActionRecorderProxyI
+	re ActionRecorderI
 	f  FieldProxyI
 }
 
-func (room *RoomModelsAdapter) Init(builder ComponentBuilderI) {
+func (room *RoomModels) Init(builder RBuilderI) {
 	builder.BuildSync(&room.s)
 	builder.BuildInformation(&room.i)
 	builder.BuildLobby(&room.l)
@@ -48,13 +46,7 @@ func (room *RoomModelsAdapter) Init(builder ComponentBuilderI) {
 }
 
 // Save save room information to database
-func (room *RoomModelsAdapter) Save(wg *sync.WaitGroup) error {
-	defer func() {
-		if wg != nil {
-			wg.Done()
-		}
-	}()
-
+func (room *RoomModels) Save() error {
 	var err error
 	room.s.Do(func() {
 		// made in NewRoom
@@ -79,7 +71,7 @@ func (room *RoomModelsAdapter) Save(wg *sync.WaitGroup) error {
 	return err
 }
 
-func (room *RoomModelsAdapter) toModelGame() models.Game {
+func (room *RoomModels) toModelGame() models.Game {
 	return models.Game{
 		ID:              room.i.RoomID(),
 		Settings:        room.i.Settings(),
@@ -91,7 +83,7 @@ func (room *RoomModelsAdapter) toModelGame() models.Game {
 	}
 }
 
-func (room *RoomModelsAdapter) toModelGamer(index int, player Player) models.Gamer {
+func (room *RoomModels) toModelGamer(index int, player Player) models.Gamer {
 	return models.Gamer{
 		ID:        player.ID,
 		Score:     player.Points,
@@ -100,48 +92,32 @@ func (room *RoomModelsAdapter) toModelGamer(index int, player Player) models.Gam
 	}
 }
 
-func (room *RoomModelsAdapter) fromModelPlayerAction(actionDB models.Action) *PlayerAction {
-	return &PlayerAction{
-		Player: actionDB.PlayerID,
-		Action: actionDB.ActionID,
-		Time:   actionDB.Date,
-	}
-}
-
-func (room *RoomModelsAdapter) toModelPlayerAction(action *PlayerAction) models.Action {
-	return models.Action{
-		PlayerID: action.Player,
-		ActionID: action.Action,
-		Date:     action.Time,
-	}
-}
-
-func (room *RoomModelsAdapter) toModelGamers() []models.Gamer {
+func (room *RoomModels) toModelGamers() []models.Gamer {
 	gamers := make([]models.Gamer, 0)
 	room.p.players().ForEach(room.getGamers(gamers))
 	return gamers
 }
 
-func (room *RoomModelsAdapter) getGamers(gamers []models.Gamer) func(int, Player) {
+func (room *RoomModels) getGamers(gamers []models.Gamer) func(int, Player) {
 	return func(index int, player Player) {
 		gamers = append(gamers, room.toModelGamer(index, player))
 	}
 }
 
-func (room *RoomModelsAdapter) toModelField() models.Field {
+func (room *RoomModels) toModelField() models.Field {
 	return room.f.Field().Model()
 }
 
-func (room *RoomModelsAdapter) toModelCells() []models.Cell {
+func (room *RoomModels) toModelCells() []models.Cell {
 	return room.f.ModelCells()
 }
 
-func (room *RoomModelsAdapter) toModelActions() []models.Action {
+func (room *RoomModels) toModelActions() []models.Action {
 	return room.re.ModelActions()
 }
 
 // JSON convert Room to RoomJSON
-func (room *RoomModelsAdapter) JSON() RoomJSON {
+func (room *RoomModels) JSON() RoomJSON {
 	return RoomJSON{
 		ID:        room.i.ID(),
 		Name:      room.i.Name(),
@@ -158,7 +134,7 @@ func (room *RoomModelsAdapter) JSON() RoomJSON {
 
 ////////// sender models //////////
 
-func (room *RoomModelsAdapter) responseRoomGameOver(timer bool,
+func (room *RoomModels) responseRoomGameOver(timer bool,
 	cells []Cell) *models.Response {
 	return &models.Response{
 		Type: "RoomGameOver",
@@ -176,13 +152,13 @@ func (room *RoomModelsAdapter) responseRoomGameOver(timer bool,
 	}
 }
 
-func (room *RoomModelsAdapter) responseRoomStatus(
+func (room *RoomModels) responseRoomStatus(
 	status int) *models.Response {
 	var leftTime int32
 	since := int32(time.Since(room.e.Date()).Seconds())
-	if status == StatusFlagPlacing {
+	if status == room_.StatusFlagPlacing {
 		leftTime = room.i.Settings().TimeToPrepare - since
-	} else if status == StatusRunning {
+	} else if status == room_.StatusRunning {
 		leftTime = room.i.Settings().TimeToPlay - since
 	}
 	return &models.Response{
@@ -199,7 +175,7 @@ func (room *RoomModelsAdapter) responseRoomStatus(
 	}
 }
 
-func (room *RoomModelsAdapter) responseRoom(
+func (room *RoomModels) responseRoom(
 	conn *Connection, isPlayer bool) *models.Response {
 	var flag Flag
 	if room.i.Settings().Deathmatch {
@@ -250,7 +226,7 @@ func (lobby *Lobby) Load(id string) (*Room, error) {
 			return
 		}
 
-		room.events.configure(StatusHistory, info.Game.Date)
+		room.events.configure(room_.StatusHistory, info.Game.Date)
 		room.record.configure(info.Actions)
 		room.field.Configure(info)
 		room.people.configure(info)

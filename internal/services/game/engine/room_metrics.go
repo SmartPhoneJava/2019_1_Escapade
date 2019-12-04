@@ -1,15 +1,16 @@
 package engine
 
 import (
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/metrics"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
 )
 
-// MetricsStrategyI handle sending metrics
+// MetricsI handle sending metrics
 // Strategy Pattern
-type MetricsStrategyI interface {
+type MetricsI interface {
 	Observe(needMetrics bool, cancel bool)
 }
 
@@ -26,7 +27,7 @@ type RoomMetrics struct {
 }
 
 // Init configure dependencies with other components of the room
-func (room *RoomMetrics) Init(builder ComponentBuilderI, rs *models.RoomSettings) {
+func (room *RoomMetrics) Init(builder RBuilderI, rs *models.RoomSettings) {
 	builder.BuildSync(&room.s)
 	builder.BuildEvents(&room.e)
 	builder.BuildField(&room.f)

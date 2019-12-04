@@ -1,21 +1,19 @@
 package engine
 
 import (
+	"context"
 	"fmt"
-
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	handlers "github.com/go-park-mail-ru/2019_1_Escapade/internal/handlers"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/return_errors"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
-
 	"sync"
 	"time"
 
-	"context"
-
 	"github.com/gorilla/websocket"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/handlers"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 )
 
 // Connection is a websocket of a player, that belongs to room
@@ -41,9 +39,10 @@ type Connection struct {
 	User *models.UserPublicInfo
 
 	wsM *sync.Mutex
-	_ws *websocket.Conn
+	_ws WebsocketConnI
 
-	lobby *Lobby
+	//lobby LobbyConnectionI //*Lobby
+	Events *ConnEvents
 
 	context context.Context
 	cancel  context.CancelFunc
@@ -53,15 +52,10 @@ type Connection struct {
 	send chan []byte
 }
 
-// NewConnection creates a new connection
-func NewConnection(ws *websocket.Conn, user *models.UserPublicInfo, lobby *Lobby) (*Connection, error) {
-	if ws == nil || user == nil || lobby == nil {
-		return nil, re.ErrorLobbyDone()
-	}
-
-	context, cancel := context.WithCancel(lobby.context)
+func newConnection() *Connection {
 	var s = &synced.SyncWgroup{}
 	s.Init(0)
+	context, cancel := context.WithCancel(context.Background())
 
 	return &Connection{
 		s: s,
@@ -79,22 +73,32 @@ func NewConnection(ws *websocket.Conn, user *models.UserPublicInfo, lobby *Lobby
 		_index: -1,
 
 		UUID: utils.RandomString(16),
-		User: user,
 
 		wsM: &sync.Mutex{},
-		_ws: ws,
-
-		lobby: lobby,
-
-		context: context,
-		cancel:  cancel,
 
 		timeM: &sync.RWMutex{},
 		_time: time.Now(),
 
+		Events: NewConnEvent(),
+
+		context: context,
+		cancel:  cancel,
+
 		send:      make(chan []byte),
 		actionSem: make(chan struct{}, 1),
-	}, nil
+	}
+}
+
+// NewConnection creates a new connection
+func NewConnection(ws WebsocketConnI, user *models.UserPublicInfo) (*Connection, error) {
+	if ws == nil || user == nil {
+		return nil, re.NoWebSocketOrUser()
+	}
+	conn := newConnection()
+	conn.User = user
+	conn.setWs(ws)
+
+	return conn, nil
 }
 
 // Restore set restored playing and waiting rooms, conn's index
@@ -141,12 +145,12 @@ func (conn *Connection) Free() {
 		conn.setDisconnected()
 
 		conn.wsClose()
+		conn.Events.Close()
 		close(conn.send)
 		close(conn.actionSem)
 		// dont delete. conn = nil make pointer nil, but other pointers
 		// arent nil and we make 'conn.disconnected = true' for them
 
-		conn.lobby = nil
 		conn.setPlayingRoom(nil)
 		conn.setWaitingRoom(nil)
 	})
@@ -159,19 +163,11 @@ func (conn *Connection) InPlayingRoom() bool {
 
 // Launch run the writer and reader goroutines and wait them to free memory
 func (conn *Connection) Launch(cw config.WebSocket, roomID string) {
-	if conn.s == nil {
-		panic(99)
-	}
 	conn.s.Do(func() {
-		// dont place there conn.wGroup.Add(1)
-		if conn.lobby == nil || conn.lobby.context == nil {
-			utils.Debug(true, "lobby nil or hasnt context!")
-			return
-		}
+		conn.Events.Join()
 
 		all := &sync.WaitGroup{}
 
-		conn.lobby.JoinConn(conn)
 		all.Add(1)
 		go conn.WriteConn(conn.context, cw, all)
 		all.Add(1)
@@ -180,9 +176,7 @@ func (conn *Connection) Launch(cw config.WebSocket, roomID string) {
 		conn.SetConnected()
 
 		if roomID != "" {
-			rs := &models.RoomSettings{}
-			rs.ID = roomID
-			conn.lobby.EnterRoom(conn, rs)
+			conn.Events.EnterRoom(roomID)
 		}
 		all.Wait()
 
@@ -190,7 +184,7 @@ func (conn *Connection) Launch(cw config.WebSocket, roomID string) {
 		if conn == nil {
 			utils.Debug(true, "conn nil")
 		}
-		conn.lobby.Leave(conn, "finished")
+		conn.Events.Leave()
 	})
 	//conn.Free()
 }
@@ -222,10 +216,7 @@ func (conn *Connection) ReadConn(parent context.Context, wsc config.WebSocket, w
 				}
 				utils.Debug(false, "#", conn.ID(), "read from conn:", string(message))
 				conn.SetConnected()
-				conn.lobby.chanBroadcast <- &Request{
-					Connection: conn,
-					Message:    message,
-				}
+				conn.Events.Request(message)
 			}
 		}
 	})
@@ -289,12 +280,6 @@ func (conn *Connection) sendGroupInformation(value handlers.JSONtype, wg *sync.W
 
 // ID return player's id
 func (conn *Connection) ID() int32 {
-	if conn == nil {
-		panic("why")
-	}
-	if conn.User == nil {
-		return -1
-	}
 	var userID int32
 	conn.s.Do(func() {
 		userID = conn.User.ID
@@ -314,6 +299,10 @@ func sendAccountTaken(conn *Connection) {
 
 func (conn *Connection) GetSync() synced.SyncI {
 	return conn.s
+}
+
+func (conn *Connection) IsPlayer() bool {
+	return conn.Index() >= 0
 }
 
 // 363 -> 305

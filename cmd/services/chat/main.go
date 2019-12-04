@@ -1,17 +1,19 @@
 package main
 
 import (
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
-	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
-	chat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
 	"google.golang.org/grpc"
-
 	"os"
+
+	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/server"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/handlers"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/proto"
 )
 
 func main() {
-
+	synced.HandleExit()
 	// first step
 	cla, err := start.GetCommandLineArgs(3, func() *start.CommandLineArgs {
 		return &start.CommandLineArgs{
@@ -21,7 +23,7 @@ func main() {
 	})
 	if err != nil {
 		utils.Debug(false, "ERROR with command line args", err.Error())
-		return
+		panic(synced.Exit{Code: 1})
 	}
 
 	ca := &start.ConfigurationArgs{}
@@ -29,28 +31,32 @@ func main() {
 	configuration, err := start.GetConfiguration(cla, ca)
 	if err != nil {
 		utils.Debug(false, "ERROR with configuration", err.Error())
-		return
+		panic(synced.Exit{Code: 2})
 	}
 
-	var handler chat.Handler
+	var handler handlers.Handler
 	handler.InitWithPostgreSQL(configuration)
 	defer handler.Close()
 
-	consul := start.RegisterInConsul(cla, configuration)
+	lastArgs := &start.AllArgs{
+		C:   configuration,
+		CLA: cla,
+	}
+	consul := start.RegisterInConsul(lastArgs)
 	err = consul.Run()
 	if err != nil {
 		utils.Debug(false, "ERROR with connection to Consul:", err.Error())
-		return
+		panic(synced.Exit{Code: 3})
 	}
 	defer consul.Close()
 
 	grpcServer := grpc.NewServer()
-	chat.RegisterChatServiceServer(grpcServer, &handler)
+	proto.RegisterChatServiceServer(grpcServer, &handler)
 
 	utils.Debug(false, "Service", consul.Name, "with id:", consul.ID, "ready to go on",
 		start.GetIP()+cla.MainPort)
 
-	server.LaunchGRPC(grpcServer, configuration.Server, cla.MainPort, func() {
+	start.LaunchGRPC(grpcServer, configuration.Server, cla.MainPort, func() {
 		utils.Debug(false, "✗✗✗ Exit ✗✗✗")
 	})
 }

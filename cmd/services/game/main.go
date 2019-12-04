@@ -2,51 +2,47 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/clients"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
-	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/handlers"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
-
 	"os"
+
+	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/server"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/handlers"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/clients"
 )
 
 func main() {
-
+	synced.HandleExit()
 	cla, err := start.GetCommandLineArgs(7, func() *start.CommandLineArgs {
 		return &start.CommandLineArgs{
 			ConfigurationPath: os.Args[1],
 			PhotoPublicPath:   os.Args[2],
 			PhotoPrivatePath:  os.Args[3],
-			FieldPath:         os.Args[4],
-			RoomPath:          os.Args[5],
 			MainPort:          os.Args[6],
 		}
 	})
+	fieldPath := os.Args[4]
+	roomPath := os.Args[5]
 	if err != nil {
 		utils.Debug(false, "ERROR with command line args", err.Error())
-		return
+		panic(synced.Exit{Code: 1})
 	}
 
 	ca := &start.ConfigurationArgs{
-		HandlersMetrics: true,
-		GameMetrics:     true,
-		Photo:           true,
-		Room:            true,
-		Field:           true,
+		Photo: true,
 	}
 	// second step
 	configuration, err := start.GetConfiguration(cla, ca)
 	if err != nil {
 		utils.Debug(false, "ERROR with configuration", err.Error())
-		return
+		panic(synced.Exit{Code: 2})
 	}
 
 	lastArgs := &start.AllArgs{
-		C:           configuration,
-		CLA:         cla,
-		IsWebsocket: true,
+		C:                  configuration,
+		CLA:                cla,
+		WithoutExecTimeout: true,
 	}
 	// third step
 	consul := start.RegisterInConsul(lastArgs)
@@ -54,7 +50,7 @@ func main() {
 	err = consul.Run()
 	if err != nil {
 		utils.Debug(false, "ERROR with connection to Consul:", err.Error())
-		return
+		panic(synced.Exit{Code: 3})
 	}
 	defer consul.Close()
 
@@ -64,18 +60,23 @@ func main() {
 	err = chatService.Init(consul, configuration.Required)
 	if err != nil {
 		utils.Debug(false, "ERROR with grpc connection:", err.Error())
-		return
+		panic(synced.Exit{Code: 4})
 	}
 	defer chatService.Close()
 
 	utils.Debug(false, "✔✔")
 
+	var gca = &handlers.ConfigurationArgs{
+		C:         configuration,
+		FieldPath: fieldPath,
+		RoomPath:  roomPath,
+	}
 	// start connection to database inside handlers
 	var handler handlers.GameHandler
-	err = handler.InitWithPostgresql(chatService, configuration)
+	err = handler.InitWithPostgresql(chatService, gca)
 	if err != nil {
 		utils.Debug(false, "Database error:", err.Error())
-		return
+		panic(synced.Exit{Code: 5})
 	}
 	defer handler.Close()
 
@@ -87,8 +88,7 @@ func main() {
 
 	fmt.Println("more conf:", configuration.Game.Lobby.Intervals, configuration.Game.Lobby.ConnectionTimeout,
 		configuration.Server.MaxConn)
-	server.LaunchHTTP(srv, configuration.Server, func() {
+	start.LaunchHTTP(srv, configuration.Server, func() {
 		utils.Debug(false, "✗✗✗ Exit ✗✗✗")
 	})
-	os.Exit(0)
 }

@@ -4,21 +4,34 @@ import (
 	"os"
 	"time"
 
-	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
+	"gopkg.in/oauth2.v3/models"
+
+	_ "github.com/go-park-mail-ru/2019_1_Escapade/docs/auth"
+	
+	start "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/server"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
 	user_db "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 	a_handlers "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/auth/handlers"
-	e_oauth "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/auth/oauth"
 	ery_db "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/ery/database"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
-
-	"gopkg.in/oauth2.v3/models"
+	e_oauth "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/auth/oauth"
 )
+
+// to generate docs, call from root "swag init -g auth/main.go"
+
+// @title Escapade Explosion AUTH
+// @version 1.0
+// @description We don't have a public API, so instead of a real host(explosion.team) we specify localhost:3003. To test the following methods, git clone https://github.com/go-park-mail-ru/2019_1_Escapade, enter the root directory and run 'docker-compose up -d'
+
+// @host localhost:3003
+// @BasePath /auth
 
 /*
 curl -H Host:api.2019-1-escapade.docker.localhost http://127.0.0.1/api/user
 */
 func main() {
-
+	synced.HandleExit()
 	// first step
 	cla, err := start.GetCommandLineArgs(3, func() *start.CommandLineArgs {
 		return &start.CommandLineArgs{
@@ -28,7 +41,7 @@ func main() {
 	})
 	if err != nil {
 		utils.Debug(false, "ERROR with command line args", err.Error())
-		return
+		panic(synced.Exit{Code: 1})
 	}
 
 	ca := &start.ConfigurationArgs{}
@@ -36,7 +49,7 @@ func main() {
 	configuration, err := start.GetConfiguration(cla, ca)
 	if err != nil {
 		utils.Debug(false, "ERROR with configuration", err.Error())
-		return
+		panic(synced.Exit{Code: 2})
 	}
 
 	// start connection to main database
@@ -49,7 +62,7 @@ func main() {
 		20, 20, time.Hour)
 	if err != nil {
 		utils.Debug(false, "ERROR with ery database:", err.Error())
-		return
+		panic(synced.Exit{Code: 3})
 	}
 	defer eryDB.Close()
 
@@ -63,25 +76,30 @@ func main() {
 	manager, tokenStore, err := e_oauth.Init(configuration, clients)
 	if err != nil {
 		utils.Debug(false, "ERROR with oauth2 equipment", err.Error())
-		return
+		panic(synced.Exit{Code: 4})
 	}
 	defer tokenStore.Close()
 
+	lastArgs := &start.AllArgs{
+		C:                  configuration,
+		CLA:                cla,
+		WithoutExecTimeout: true,
+	}
 	// third step
-	consul := start.RegisterInConsul(cla, configuration)
+	consul := start.RegisterInConsul(lastArgs)
 
 	// start connection to Consul
 	err = consul.Run()
 	if err != nil {
 		utils.Debug(false, "ERROR with connection to Consul:", err.Error())
-		return
+		panic(synced.Exit{Code: 5})
 	}
 	defer consul.Close()
 
 	/// forth step
 	srv := e_oauth.Server(userDB, eryDB, manager)
 	r := a_handlers.Router(srv, tokenStore)
-	server := start.ConfigureServer(r, configuration.Server, cla)
+	server := start.ConfigureServer(r, lastArgs)
 
 	utils.Debug(false, "Service", consul.Name, "with id:", consul.ID, "ready to go on",
 		start.GetIP(), consul.Port)

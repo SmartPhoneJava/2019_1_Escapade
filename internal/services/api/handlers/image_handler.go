@@ -2,20 +2,18 @@ package handlers
 
 import (
 	"bytes"
-
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/database"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/photo"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
-
-	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/handlers"
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/return_errors"
-
 	"mime/multipart"
 	"net/http"
-
 	uuid "github.com/satori/go.uuid"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/database"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/photo"
+	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/handlers"
+	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 )
 
 type ImageHandler struct {
@@ -50,14 +48,7 @@ func (h *ImageHandler) Handle(rw http.ResponseWriter, r *http.Request) {
 		http.MethodOptions: nil})
 }
 
-// GetImage returns user avatar
-// @Summary Get user avatar
-// @Description Get user avatar
-// @ID GetImage
-// @Success 200 {object} models.Result "Avatar found successfully"
-// @Failure 401 {object} models.Result "Required authorization"
-// @Failure 404 {object} models.Result "Avatar not found"
-// @Router /avatar [GET]
+// delete it
 func (h *ImageHandler) GetImage(rw http.ResponseWriter, r *http.Request) ih.Result {
 	const place = "GetImage"
 	var (
@@ -88,10 +79,15 @@ func (h *ImageHandler) GetImage(rw http.ResponseWriter, r *http.Request) ih.Resu
 	return ih.NewResult(http.StatusOK, place, &url, nil)
 }
 
-// PostImage create avatar поделать курл
+// PostImage create avatar
 // @Summary Create user avatar
-// @Description Create user avatar
+// @Description Load new avatar to the current user. The current one is the one whose token is provided.
 // @ID PostImage
+// @Security OAuth2Application[write]
+// @Tags account
+// @Accept  multipart/form-data
+// @Produce  json
+// @Param file formData file true "account image"
 // @Success 201 {object} models.Result "Avatar created successfully"
 // @Failure 401 {object} models.Result "Required authorization"
 // @Failure 500 {object} models.Result "Avatar not found"

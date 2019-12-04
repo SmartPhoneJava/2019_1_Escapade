@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	chat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/synced"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
+	ctypes "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/database"
+	chat "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/chat/proto"
 )
 
 /*
@@ -68,7 +70,7 @@ func (lobby *Lobby) sendMessagesToDB() {
 		// TODO change it if implement several service instances(i am about 0 )
 		if lobby.dbChatID() == 0 {
 			chatID, newMessages, err = GetChatIDAndMessages(lobby.ChatService, lobby.location(),
-				chat.LobbyType, 0, lobby.SetImage)
+				ctypes.LobbyType, 0, lobby.SetImage)
 			if err != nil {
 				utils.Debug(false, "sendMessagesToDB error:", err.Error())
 				return
@@ -172,4 +174,38 @@ func (lobby *Lobby) Run() {
 			return
 		}
 	}
+}
+
+// Observe connection events
+// 	run it in goroutine
+func (lobby *Lobby) Observe(conn *Connection) {
+	lobby.s.DoWithOther(conn, func() {
+		for {
+			event := conn.Events.Get()
+			switch event.Code {
+			case Join:
+				lobby.Join(conn)
+			case EnterRoom:
+				rs, ok := event.Content.(*models.RoomSettings)
+				if ok {
+					lobby.EnterRoom(conn, rs)
+				} else {
+					utils.Debug(false, "cant execute EnterRoom connection event - wrong content type of event")
+				}
+			case Leave:
+				lobby.Leave(conn, "finish")
+				return
+			case Action:
+				content, ok := event.Content.([]byte)
+				if ok {
+					lobby.chanBroadcast <- &Request{
+						Connection: conn,
+						Message:    content,
+					}
+				} else {
+					utils.Debug(false, "cant execute send Requesr connection event - wrong content type of event")
+				}
+			}
+		}
+	})
 }

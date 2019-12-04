@@ -3,9 +3,10 @@ package engine
 import (
 	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/return_errors"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+	action_ "github.com/go-park-mail-ru/2019_1_Escapade/internal/services/game/engine/action"
 )
 
 // JoinConn is the wrapper in order to put the connection in the channel chanJoin
@@ -52,11 +53,11 @@ func (lobby *Lobby) Leave(conn *Connection, message string) {
 			}
 		}
 		if conn.PlayingRoom() != nil {
-			conn.PlayingRoom().connEvents.Disconnect(conn)
+			conn.PlayingRoom().client.Disconnect(conn)
 			// dont delete from lobby, because player not in lobby
 			return
 		} else if conn.WaitingRoom() != nil {
-			conn.WaitingRoom().connEvents.Disconnect(conn)
+			conn.WaitingRoom().client.Disconnect(conn)
 			// continue, because player in lobby
 		}
 		if conn == nil {
@@ -73,9 +74,9 @@ func (lobby *Lobby) Leave(conn *Connection, message string) {
 }
 
 // LeaveRoom handle leave room
-func (lobby *Lobby) LeaveRoom(conn *Connection, action int) {
+func (lobby *Lobby) LeaveRoom(conn *Connection, action int32) {
 	lobby.s.DoWithOther(conn, func() {
-		if action != ActionDisconnect {
+		if action != action_.Disconnect {
 			if conn.PlayingRoom() != nil {
 				lobby.PlayerToWaiter(conn)
 			} else {
@@ -101,7 +102,7 @@ func (lobby *Lobby) EnterRoom(conn *Connection, rs *models.RoomSettings) {
 			if conn.WaitingRoom().info.ID() == rs.ID {
 				return
 			}
-			conn.WaitingRoom().connEvents.Leave(conn)
+			conn.WaitingRoom().client.Leave(conn)
 		}
 
 		if rs.ID == "create" {
@@ -113,7 +114,7 @@ func (lobby *Lobby) EnterRoom(conn *Connection, rs *models.RoomSettings) {
 
 		if room := lobby.allRooms.Search(rs.ID); room != nil {
 			utils.Debug(false, "lobby found required room")
-			room.connEvents.Enter(conn)
+			room.client.Enter(conn)
 		} else {
 			lobby.PickUpRoom(conn, rs)
 		}

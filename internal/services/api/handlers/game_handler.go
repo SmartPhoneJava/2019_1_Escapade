@@ -1,21 +1,18 @@
 package handlers
 
 import (
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/database"
-	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/handlers"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
-
-	//"github.com/go-park-mail-ru/2019_1_Escapade/internal/game"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/models"
-
-	//"github.com/go-park-mail-ru/2019_1_Escapade/internal/photo"
-	//"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
-
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/return_errors"
-
 	"net/http"
 	//"github.com/gorilla/websocket"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/database"
+	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/handlers"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
+	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
+	//"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/photo"
+	//"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 )
 
 type GameHandler struct {
@@ -51,15 +48,17 @@ func (h *GameHandler) Handle(rw http.ResponseWriter, r *http.Request) {
 
 // OfflineSave save offline game results
 // @Summary Save offline game
-// @Description Save offline game results
+// @Description Save offline game results of current user. The current one is the one whose token is provided.
+// @ID OfflineSave
+// @Security OAuth2Application[write]
+// @Tags game
 // @Accept  json
 // @Param record body models.Record true "Results of offline game"
 // @Produce  json
-// @ID OfflineSave
 // @Success 200 {object} models.Result "Done"
-// @Failure 400 {object} models.Result "Wrong input data"
+// @Failure 400 {object} models.Result "Invalid data for save"
 // @Failure 401 {object} models.Result "Required authorization"
-// @Failure 404 {object} models.Result "Avatar not found"
+// @Failure 500 {object} models.Result "Database error"
 // @Router /game [POST]
 func (h *GameHandler) OfflineSave(rw http.ResponseWriter, r *http.Request) ih.Result {
 	const place = "OfflineSave"

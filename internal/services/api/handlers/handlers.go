@@ -1,17 +1,20 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/config"
-	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/database"
-	mi "github.com/go-park-mail-ru/2019_1_Escapade/internal/middleware"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/router"
-	server "github.com/go-park-mail-ru/2019_1_Escapade/internal/server"
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
+	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/database"
+	mi "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/middleware"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/router"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/server"
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 )
 
 type Handlers struct {
@@ -26,7 +29,6 @@ type Handlers struct {
 // repositories stores all implementations of operations in the database
 type repositories struct {
 	user   database.UserRepositoryI
-	game   database.GameRepositoryI
 	record database.RecordRepositoryI
 	image  database.ImageRepositoryI
 }
@@ -36,7 +38,6 @@ func (h *Handlers) InitWithPostgreSQL(c *config.Configuration) error {
 	var (
 		reps = repositories{
 			user:   &database.UserRepositoryPQ{},
-			game:   &database.GameRepositoryPQ{},
 			record: &database.RecordRepositoryPQ{},
 			image:  &database.ImageRepositoryPQ{},
 		}
@@ -47,6 +48,7 @@ func (h *Handlers) InitWithPostgreSQL(c *config.Configuration) error {
 
 // Init open connection to database and put it to all handlers
 func (h *Handlers) Init(c *config.Configuration, db idb.DatabaseI, reps repositories) error {
+	fmt.Println("string:", c.DataBase.ConnectionString)
 	h.c = c
 	err := db.Open(c.DataBase)
 	if err != nil {
@@ -82,6 +84,8 @@ func (h *Handlers) Init(c *config.Configuration, db idb.DatabaseI, reps reposito
 	if err != nil {
 		return err
 	}
+	mi.Init()
+
 	return nil
 }
 
@@ -108,24 +112,33 @@ func (h *Handlers) Router() *mux.Router {
 	var api = r.PathPrefix("/api").Subrouter()
 	var apiWithAuth = r.PathPrefix("/api").Subrouter()
 
-	api.HandleFunc("/user", h.user.Handle).Methods("OPTIONS", "POST")
-	apiWithAuth.HandleFunc("/user", h.user.Handle).Methods("DELETE", "PUT", "GET")
+	api.HandleFunc("/user", h.user.Handle).Methods("OPTIONS", "POST", "DELETE")
+	apiWithAuth.HandleFunc("/user", h.user.Handle).Methods("PUT", "GET")
 
-	api.HandleFunc("/session", h.session.Handle).Methods("POST", "OPTIONS", "DELETE")
+	api.HandleFunc("/session", h.session.Handle).Methods("POST", "OPTIONS")
+	apiWithAuth.HandleFunc("/session", h.session.Handle).Methods("DELETE")
 
+	// delete "/avatar/{name}" path
 	api.HandleFunc("/avatar/{name}", h.image.Handle).Methods("GET")
+
 	api.HandleFunc("/avatar", h.image.Handle).Methods("OPTIONS")
 	apiWithAuth.HandleFunc("/avatar", h.image.Handle).Methods("POST")
 
 	api.HandleFunc("/game", h.game.Handle).Methods("OPTIONS")
 	apiWithAuth.HandleFunc("/game", h.game.Handle).Methods("POST")
 
-	api.HandleFunc("/users/pages", h.users.HandleUsersPages).Methods("GET", "OPTIONS")
-	api.HandleFunc("/users/pages_amount", h.users.HandleUsersPageAmount).Methods("GET")
+	api.HandleFunc("/users/{id}", h.users.HandleGetProfile).Methods("GET", "OPTIONS")
+	api.HandleFunc("/users/pages/page", h.users.HandleUsersPages).Methods("GET", "OPTIONS")
+	api.HandleFunc("/users/pages/amount", h.users.HandleUsersPageAmount).Methods("GET")
 
 	r.PathPrefix("/health").HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 
 		rw.Write([]byte("all ok " + server.GetIP()))
+	})
+
+	r.PathPrefix("/hard").HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		time.Sleep(7 * time.Second)
+		rw.Write([]byte("hard done " + server.GetIP()))
 	})
 
 	r.MethodNotAllowedHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

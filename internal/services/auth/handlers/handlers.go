@@ -6,10 +6,11 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/go-park-mail-ru/2019_1_Escapade/internal/utils"
 	"github.com/go-session/session"
 	pg "github.com/vgarvardt/go-oauth2-pg"
 	"gopkg.in/oauth2.v3/server"
+
+	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 )
 
 func deleteHandler(srv *server.Server, tokenStore *pg.TokenStore) func(w http.ResponseWriter, r *http.Request) {
@@ -48,12 +49,25 @@ func testHandler(srv *server.Server) func(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// tokenHandler handle getting token
+// @Summary Get token
+// @Description Get session token for current client
+// @ID tokenHandler
+// @Accept  json
+// @Produce  json
+// @Param grant_type body string true "'password' or 'refresh_token'" default("password")
+// @Param client_id body string true "client id" default("1")
+// @Param client_secret body string true "client secret" default("1")
+// @Param username body string false "username" default("username")
+// @Param password body string false "password" default("password")
+// @Param refresh_token body string false "client id" default("1")
+// @Success 200 {object} models.SessionToken "token was given"
+// @Failure 401 {object} models.ErrorDescription "invalid body parameters "
+// @Router /token [POST]
 func tokenHandler(srv *server.Server) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		utils.Debug(false, "/token")
 		err := srv.HandleTokenRequest(w, r)
 		if err != nil {
-			utils.Debug(false, "cant@", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
