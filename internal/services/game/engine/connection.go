@@ -91,7 +91,7 @@ func newConnection() *Connection {
 
 // NewConnection creates a new connection
 func NewConnection(ws WebsocketConnI, user *models.UserPublicInfo) (*Connection, error) {
-	if ws == nil || user == nil {
+	if re.NoNil(ws, user) != nil {
 		return nil, re.NoWebSocketOrUser()
 	}
 	conn := newConnection()
@@ -181,9 +181,6 @@ func (conn *Connection) Launch(cw config.WebSocket, roomID string) {
 		all.Wait()
 
 		conn.setDisconnected()
-		if conn == nil {
-			utils.Debug(true, "conn nil")
-		}
 		conn.Events.Leave()
 	})
 	//conn.Free()

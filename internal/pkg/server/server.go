@@ -1,21 +1,22 @@
 package server
 
 import (
-	"strconv"
 	"context"
+	"golang.org/x/net/netutil"
+	"google.golang.org/grpc"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"golang.org/x/net/netutil"
-	"google.golang.org/grpc"
+	"strconv"
 
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 )
 
+// LaunchHTTP launch http server
 func LaunchHTTP(server *http.Server, serverConfig config.Server,
-	lastFunc func()) {
+	lastFunc func()) error {
 
 	errChan := make(chan error)
 	stopChan := make(chan os.Signal)
@@ -30,7 +31,7 @@ func LaunchHTTP(server *http.Server, serverConfig config.Server,
 	l, err := net.Listen("tcp", server.Addr)
 	if err != nil {
 		utils.Debug(true, "Listen error", err.Error())
-		return
+		return err
 	}
 
 	defer l.Close()
@@ -50,7 +51,7 @@ func LaunchHTTP(server *http.Server, serverConfig config.Server,
 	select {
 	case err := <-errChan:
 		utils.Debug(false, "Fatal error: ", err.Error())
-		return
+		return err
 	case <-stopChan:
 		err := server.Shutdown(ctx)
 		if err != nil {
@@ -58,9 +59,11 @@ func LaunchHTTP(server *http.Server, serverConfig config.Server,
 		}
 	}
 	<-ctx.Done()
+	return nil
 }
 
-func LaunchGRPC(grpcServer *grpc.Server, serverConfig config.Server, port string, lastFunc func()) {
+// LaunchGRPC launch grpc server
+func LaunchGRPC(grpcServer *grpc.Server, serverConfig config.Server, port string, lastFunc func()) error {
 	errChan := make(chan error)
 	stopChan := make(chan os.Signal)
 
@@ -74,7 +77,7 @@ func LaunchGRPC(grpcServer *grpc.Server, serverConfig config.Server, port string
 
 	if err != nil {
 		utils.Debug(true, "Listen error", err.Error())
-		return
+		return err
 	}
 
 	defer l.Close()
@@ -95,9 +98,11 @@ func LaunchGRPC(grpcServer *grpc.Server, serverConfig config.Server, port string
 	select {
 	case err := <-errChan:
 		utils.Debug(false, "Fatal error: ", err.Error())
+		return err
 	case <-stopChan:
 		grpcServer.GracefulStop()
 	}
+	return nil
 }
 
 func Port(port string) (string, int, error) {

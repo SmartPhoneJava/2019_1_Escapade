@@ -4,38 +4,34 @@ import (
 	"bytes"
 	"mime/multipart"
 	"net/http"
+
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
-	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/database"
+	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/handlers"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/photo"
-	ih "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/handlers"
 	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
 
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/services/api/database"
 )
 
+// ImageHandler handle requests associated with images
 type ImageHandler struct {
 	ih.Handler
 	image database.ImageUseCaseI
 }
 
-func (h *ImageHandler) Init(c *config.Configuration, DB idb.DatabaseI,
-	imageDB database.ImageRepositoryI) error {
+// Init open connections to database
+func (h *ImageHandler) Init(c *config.Configuration, db *database.Input) *ImageHandler {
 	h.Handler.Init(c)
-
-	h.image = &database.ImageUseCase{}
-	h.image.Init(imageDB)
-	err := h.image.Use(DB)
-	if err != nil {
-		return err
-	}
-	return nil
+	h.image = db.ImageUC
+	return h
 }
 
-func (h *ImageHandler) Close() {
-	h.image.Close()
+// Close connections to database
+func (h *ImageHandler) Close() error {
+	return h.image.Close()
 }
 
 // TODO add deleting
@@ -135,7 +131,11 @@ func (h *ImageHandler) getFileFromRequst(rw http.ResponseWriter, r *http.Request
 		handle *multipart.FileHeader
 	)
 
-	if file, handle, err = r.FormFile("file"); err != nil || file == nil || handle == nil {
+	file, handle, err = r.FormFile("file")
+	if err != nil {
+		return nil, re.FileWrapper(err)
+	}
+	if err = re.NoNil(file, handle); err != nil {
 		return nil, re.FileWrapper(err)
 	}
 

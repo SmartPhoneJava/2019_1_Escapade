@@ -17,7 +17,7 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(in *jlexer.Lexer, out *roomConfiguration) {
+func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(in *jlexer.Lexer, out *RoomConfiguration) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -36,8 +36,6 @@ func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 			continue
 		}
 		switch key {
-		case "Set":
-			out.Set = bool(in.Bool())
 		case "nameMin":
 			out.NameMin = int32(in.Int32())
 		case "nameMax":
@@ -66,18 +64,18 @@ func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 		in.Consumed()
 	}
 }
-func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(out *jwriter.Writer, in roomConfiguration) {
+func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(out *jwriter.Writer, in RoomConfiguration) {
 	out.RawByte('{')
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"Set\":"
-		out.RawString(prefix[1:])
-		out.Bool(bool(in.Set))
-	}
-	{
 		const prefix string = ",\"nameMin\":"
-		out.RawString(prefix)
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
 		out.Int32(int32(in.NameMin))
 	}
 	{
@@ -124,29 +122,29 @@ func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 }
 
 // MarshalJSON supports json.Marshaler interface
-func (v roomConfiguration) MarshalJSON() ([]byte, error) {
+func (v RoomConfiguration) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
 	easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
-func (v roomConfiguration) MarshalEasyJSON(w *jwriter.Writer) {
+func (v RoomConfiguration) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
-func (v *roomConfiguration) UnmarshalJSON(data []byte) error {
+func (v *RoomConfiguration) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *roomConfiguration) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *RoomConfiguration) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants(l, v)
 }
-func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(in *jlexer.Lexer, out *fieldConfiguration) {
+func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(in *jlexer.Lexer, out *FieldConfiguration) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -165,8 +163,6 @@ func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 			continue
 		}
 		switch key {
-		case "Set":
-			out.Set = bool(in.Bool())
 		case "widthMin":
 			out.WidthMin = int32(in.Int32())
 		case "widthMax":
@@ -185,18 +181,18 @@ func easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 		in.Consumed()
 	}
 }
-func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(out *jwriter.Writer, in fieldConfiguration) {
+func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(out *jwriter.Writer, in FieldConfiguration) {
 	out.RawByte('{')
 	first := true
 	_ = first
 	{
-		const prefix string = ",\"Set\":"
-		out.RawString(prefix[1:])
-		out.Bool(bool(in.Set))
-	}
-	{
 		const prefix string = ",\"widthMin\":"
-		out.RawString(prefix)
+		if first {
+			first = false
+			out.RawString(prefix[1:])
+		} else {
+			out.RawString(prefix)
+		}
 		out.Int32(int32(in.WidthMin))
 	}
 	{
@@ -218,25 +214,25 @@ func easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGam
 }
 
 // MarshalJSON supports json.Marshaler interface
-func (v fieldConfiguration) MarshalJSON() ([]byte, error) {
+func (v FieldConfiguration) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
 	easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
-func (v fieldConfiguration) MarshalEasyJSON(w *jwriter.Writer) {
+func (v FieldConfiguration) MarshalEasyJSON(w *jwriter.Writer) {
 	easyjson8a25db09EncodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
-func (v *fieldConfiguration) UnmarshalJSON(data []byte) error {
+func (v *FieldConfiguration) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
 	easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
-func (v *fieldConfiguration) UnmarshalEasyJSON(l *jlexer.Lexer) {
+func (v *FieldConfiguration) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson8a25db09DecodeGithubComGoParkMailRu20191EscapadeInternalServicesGameConstants1(l, v)
 }

@@ -1,11 +1,8 @@
 package engine
 
 import (
-	"time"
-
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/models"
-	re "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/return_errors"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/synced"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 
@@ -31,7 +28,7 @@ type Room struct {
 	people           PeopleI
 	events           EventsI
 	record           ActionRecorderI
-	metrics          MetricsI
+	metrics          *RoomMetrics
 	messages         MessagesI
 	garbageCollector GarbageCollectorI
 }
@@ -90,63 +87,21 @@ type RoomArgs struct {
 	Field    *Field
 }
 
-// NewRoom return new instance of room
-func NewRoom(c *config.Room, lobby *Lobby,
-	game *models.Game, id string) (*Room, error) {
-	if !CharacteristicsCheck(game.Settings) || !game.Settings.FieldCheck() {
-		return nil, re.ErrorInvalidRoomSettings()
-	}
-
-	var room = &Room{}
-	dbchatID, dbRoomID, err := room.registerInDB(lobby, game, id)
-	if err != nil {
-		return room, err
-	}
-	var ra = &RoomArgs{
-		c:        c,
-		lobby:    lobby,
-		rs:       game.Settings,
-		id:       id,
-		DBchatID: dbchatID,
-		DBRoomID: dbRoomID,
-	}
-	room.configureAndStart(ra)
-
-	return room, err
-}
 func (room *Room) GetSync() synced.SyncI {
 	return room.sync
 }
 
-func (room *Room) registerInDB(lobby *Lobby, game *models.Game, id string) (int32, int32, error) {
-	var (
-		dbRoomID, chatID int32
-		err              error
-	)
-	game.Settings.ID = id
-	if game.ID == 0 {
-		game.Date = time.Now()
-		// we create chat here, not when all people will be find, because
-		// with this chat people can message while battle is finding players
-		dbRoomID, chatID, err = lobby.db().Create(game)
-		if err != nil {
-			return dbRoomID, chatID, err
-		}
-	} else {
-		dbRoomID = game.ID
-		chatID = game.ChatID
+// Init initialize instance of room
+func (room *Room) Init(ra *RoomArgs) error {
+	if err := constants.Check(ra.rs); err != nil {
+		return err
 	}
-	return dbRoomID, chatID, err
-}
 
-// Init init instance of room
-func (room *Room) configureAndStart(ra *RoomArgs) {
-	var (
-		components = &RoomBuilder{}
-	)
 	ra.Field = NewField(ra.rs, &ra.c.Field)
-	components.Build(room, ra)
+	new(RoomBuilder).Build(room, ra)
 	go room.events.Run(room)
+
+	return nil
 }
 
 /* Examples of json

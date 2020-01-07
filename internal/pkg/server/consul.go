@@ -1,16 +1,29 @@
 package server
 
 import (
-	"fmt"
 	"os"
 	"sync"
 	"time"
+	"fmt"
 
 	consulapi "github.com/hashicorp/consul/api"
 	"github.com/hashicorp/go-cleanhttp"
 
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/utils"
 )
+
+//go:generate $GOPATH/bin/mockery -name "ConsulServiceI"
+
+type ConsulServiceI interface {
+	Init(input *ConsulInput) ConsulServiceI
+	Health() *consulapi.Health
+
+	ServiceName() string
+	ServiceID() string
+
+	Run() error
+	Close() error
+}
 
 //TODO
 // realize docker, grpc, tcp, script check - https://www.consul.io/docs/agent/checks.html
@@ -61,69 +74,48 @@ type ConsulService struct {
 	enableTraefik bool
 }
 
-type ConsulInput struct {
-	Name          string
-	Port          int
-	Tags          []string
-	TTL           time.Duration
-	MaxConn       int
-	ConsulHost    string
-	ConsulPort    string
-	Check         func() (bool, error)
-	EnableTraefik bool
+// Init initialize ConsulService
+func (cs *ConsulService) Init(input *ConsulInput) ConsulServiceI {
+
+	cs.Name = input.Name
+	cs.TTL = input.TTL
+	cs.Checks = make([]*consulapi.AgentServiceCheck, 1)
+	cs.UpdateService()
+	cs.Address = GetIP()
+	cs.Port = input.Port
+
+	var weight = CountWeight()
+	cs.currentM = &sync.RWMutex{}
+	cs._currentWeight = weight
+	cs.initWeight = weight
+
+	cs.clientM = &sync.RWMutex{}
+	cs._client = nil
+
+	cs.Tags = input.Tags
+	cs.Check = input.Check
+	cs.ConsulAddr = input.ConsulHost + input.ConsulPort
+	cs.enableTraefik = input.EnableTraefik
+	return cs
 }
 
-// InitConsulService return instance of ConsulService
-func InitConsulService(input *ConsulInput) *ConsulService {
-
-	if input.EnableTraefik {
-		input.Tags = append(input.Tags,
-			"traefik.enable=true",
-			"traefik.port=80",
-			"traefik.docker.network=backend",
-			"traefik.backend.loadbalancer=drr",
-			"traefik.backend.maxconn.amount="+utils.String(input.MaxConn),
-			"traefik.backend.maxconn.extractorfunc=client.ip")
-	} else {
-		input.Tags = append(input.Tags, "traefik.enable=false")
+func (cs *ConsulService) UpdateService() {
+	cs.ID = ServiceID(cs.Name)
+	cs.Checks[0] = &consulapi.AgentServiceCheck{
+		CheckID:                        cs.ID,
+		TTL:                            cs.TTL.String(),
+		DeregisterCriticalServiceAfter: time.Minute.String(), // todo в конфиг
 	}
-
-	return generateService(input)
 }
 
-func generateService(input *ConsulInput) *ConsulService {
-	var (
-		id      = ServiceID(input.Name)
-		weight  = CountWeight()
-		address = GetIP()
-	)
+// ServiceName return service name
+func (cs *ConsulService) ServiceName() string {
+	return cs.Name
+}
 
-	checks := []*consulapi.AgentServiceCheck{
-		&consulapi.AgentServiceCheck{
-			CheckID:                        "service:" + id,
-			TTL:                            input.TTL.String(),
-			DeregisterCriticalServiceAfter: time.Minute.String(),
-		}}
-	return &ConsulService{
-		ID:      id,
-		Name:    input.Name,
-		Address: address,
-		Port:    input.Port,
-
-		currentM:       &sync.RWMutex{},
-		_currentWeight: weight,
-
-		clientM: &sync.RWMutex{},
-		_client: nil,
-
-		initWeight:    weight,
-		Tags:          input.Tags,
-		TTL:           input.TTL,
-		Check:         input.Check,
-		Checks:        checks,
-		ConsulAddr:    input.ConsulHost + input.ConsulPort,
-		enableTraefik: input.EnableTraefik,
-	}
+// ServiceID return service id
+func (cs *ConsulService) ServiceID() string {
+	return cs.ID
 }
 
 // get the consul client
@@ -162,6 +154,7 @@ func (cs *ConsulService) register(tags ...string) error {
 	for try >= 0 {
 		try--
 		client := cs.client()
+		cs.UpdateService()
 		if client != nil {
 			if err = client.Agent().ServiceRegister(&consulapi.AgentServiceRegistration{
 				ID:      cs.ID,
@@ -257,10 +250,14 @@ func (cs *ConsulService) AddHTTPCheck(scheme, path string) {
 // update - send service status to Consul
 func (cs *ConsulService) update() {
 	var (
-		isWarning, err = cs.Check()
+		isWarning bool
+		err error
 		status         = consulapi.HealthPassing
 		message        = "Alive and reachable"
 	)
+	if cs.Check != nil {
+		isWarning, err = cs.Check()
+	}
 	if err != nil {
 		message = err.Error()
 		if isWarning {
@@ -274,8 +271,9 @@ func (cs *ConsulService) update() {
 	} else {
 		cs.checkAndSetWeight(cs.initWeight)
 	}
-	err = cs.client().Agent().UpdateTTL("service:"+cs.ID, message, status)
+	err = cs.client().Agent().UpdateTTL(cs.ID, message, status)
 	if err != nil {
+		cs.client().Agent().ServiceDeregister(cs.ID)
 		utils.Debug(false, "agent of", cs.ID, " UpdateTTL error:", err.Error())
 		cs.register()
 	}
@@ -283,7 +281,7 @@ func (cs *ConsulService) update() {
 
 // ServiceID return id of the service
 func ServiceID(serviceName string) string {
-	return serviceName + "-" + os.Getenv("HOSTNAME")
+	return serviceName + "-" + os.Getenv("HOSTNAME") + "-" + utils.RandomString(5) // todo в конфиг
 }
 
 // CountWeight return weight of the service taking into
@@ -299,6 +297,7 @@ func CountWeight() int {
 	return weight
 }
 
+// Health return is service health
 func (cs *ConsulService) Health() *consulapi.Health {
 	return cs.client().Health()
 }

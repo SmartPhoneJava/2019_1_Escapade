@@ -10,7 +10,6 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/config"
-	idb "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/database"
 	mi "github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/middleware"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/router"
 	"github.com/go-park-mail-ru/2019_1_Escapade/internal/pkg/server"
@@ -18,7 +17,9 @@ import (
 )
 
 type Handlers struct {
-	c       *config.Configuration
+	c  *config.Configuration
+	db *database.Input
+
 	user    *UserHandler
 	users   *UsersHandler
 	game    *GameHandler
@@ -26,76 +27,41 @@ type Handlers struct {
 	image   *ImageHandler
 }
 
-// repositories stores all implementations of operations in the database
-type repositories struct {
-	user   database.UserRepositoryI
-	record database.RecordRepositoryI
-	image  database.ImageRepositoryI
-}
-
 // InitWithPostgreSQL apply postgreSQL as database
 func (h *Handlers) InitWithPostgreSQL(c *config.Configuration) error {
-	var (
-		reps = repositories{
-			user:   &database.UserRepositoryPQ{},
-			record: &database.RecordRepositoryPQ{},
-			image:  &database.ImageRepositoryPQ{},
-		}
-		database = &idb.PostgresSQL{}
-	)
-	return h.Init(c, database, reps)
+	return h.Init(c, new(database.Input).InitAsPSQL())
 }
 
 // Init open connection to database and put it to all handlers
-func (h *Handlers) Init(c *config.Configuration, db idb.DatabaseI, reps repositories) error {
+func (h *Handlers) Init(c *config.Configuration, input *database.Input) error {
 	fmt.Println("string:", c.DataBase.ConnectionString)
+
+	input.Init()
+	if err := input.IsValid(); err != nil {
+		return err
+	}
+
 	h.c = c
-	err := db.Open(c.DataBase)
+	h.db = input
+
+	err := input.Connect(c.DataBase)
 	if err != nil {
 		return err
 	}
 
-	h.user = &UserHandler{}
-	err = h.user.Init(c, db, reps.user, reps.record)
-	if err != nil {
-		return err
-	}
-
-	h.session = &SessionHandler{}
-	err = h.session.Init(c, db, reps.user, reps.record)
-	if err != nil {
-		return err
-	}
-
-	h.game = &GameHandler{}
-	err = h.game.Init(c, db, reps.record)
-	if err != nil {
-		return err
-	}
-
-	h.users = &UsersHandler{}
-	err = h.users.Init(c, db, reps.user, reps.record)
-	if err != nil {
-		return err
-	}
-
-	h.image = &ImageHandler{}
-	err = h.image.Init(c, db, reps.image)
-	if err != nil {
-		return err
-	}
 	mi.Init()
 
+	h.user = new(UserHandler).Init(c, input)
+	h.session = new(SessionHandler).Init(c, input)
+	h.game = new(GameHandler).Init(c, input)
+	h.users = new(UsersHandler).Init(c, input)
+	h.image = new(ImageHandler).Init(c, input)
 	return nil
 }
 
 // Close connections to darabase of all handlers
-func (h *Handlers) Close() {
-	h.user.Close()
-	h.users.Close()
-	h.session.Close()
-	h.game.Close()
-	h.image.Close()
+func (h *Handlers) Close() error {
+	return h.db.Close()
 }
 
 // Router return router of api operations
